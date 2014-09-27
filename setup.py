@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from distutils.core import setup
+from setuptools import setup
 
 import versioneer
 versioneer.VCS = "git"
@@ -30,6 +30,8 @@ Tools to run Git over Foolscap FURLs.
         "Topic :: Software Development",
         ],
     'platforms': ["any"],
+
+    'install_requires': ["foolscap >= 0.7.0"],
 
     'scripts': ["bin/git-foolscap", "bin/git-remote-pb"],
 
