@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python
 
 import os.path, sys, re, shutil
 from subprocess import Popen, PIPE
