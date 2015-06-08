@@ -1,13 +1,7 @@
 #!/usr/bin/env python
 
 from setuptools import setup
-
 import versioneer
-versioneer.VCS = "git"
-versioneer.versionfile_source = "_version.py"
-versioneer.versionfile_build = None
-versioneer.tag_prefix = ""
-versioneer.parentdir_prefix = "git-foolscap-"
 
 setup_args = {
     'name': "git-foolscap",
