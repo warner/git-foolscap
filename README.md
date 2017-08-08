@@ -28,7 +28,9 @@ Technically, this means that servers only need the `git-foolscap` executable, an
 
 ## Usage: Server
 
-To provide read-only access to a single repository, run `git foolscap create read-only COMMENT` from within the repo's directory. "COMMENT" should be a single string (with quotes if it includes spaces) that reminds you about who you're providing access to: it will be recorded and made available to `git foolscap list` later, in case you want to selectively revoke acess in the future. `create` will print the FURL that should be delivered to your clients.
+To provide read-only access to a single repository, run `git foolscap create --port=ENDPOINT --location=HINT read-only COMMENT` from within the repo's directory. "COMMENT" should be a single string (with quotes if it includes spaces) that reminds you about who you're providing access to: it will be recorded and made available to `git foolscap list` later, in case you want to selectively revoke acess in the future. `create` will print the FURL that should be delivered to your clients.
+
+`ENDPOINT` tells the server what TCP port to listen on, and should look something like `tcp:12345`. `HINT` tells it what network location to advertise, for which you'll need to know an externally-reachable hostname or IP address. The hint should look something like `tcp:example.org:12345`. Both must be supplied.
 
 Then run `git foolscap start` to launch the server.
 
@@ -44,17 +46,13 @@ Once someone gives you a FURL, you can simply clone from it as you would a norma
 
 ## Cleaning up the FURL
 
-By default, the flappserver uses `ifconfig` to determine the host's IP addresses, to construct the "connection hints" portion of the FURL. This tells the client how to connect to the server. The server must have a publically-reachable address (or at least reachable by your clients), or you must configure a port-forwarding and put the externally-reachable address+port into the FURL.
+The flappserver uses the `--location=` you provide to construct the "connection hints" portion of the FURL. This tells the client how to connect to the server. The server must have a publically-reachable address (or at least reachable by your clients), or you must configure a port-forwarding and put the externally-reachable address+port into the FURL.
 
-The automatically-detected IP addresses will include 127.0.0.1, which is not so useful from external hosts. You can edit the FURL to replace any or all of the IP addresses with domain names to make it shorter/prettier and more accurate. For example, the default might be:
+If you got the hostname wrong, or if you used an IP address and it has changed, you can edit the FURL later. You can also use multiple hints, and the client will try to connect to each of them until at least one works:
 
-    pb://tvzddtbzbldthde5kdsvjvzpweifx7ae@1.2.3.4:57306,127.0.0.1:57306/jmxpcs6lsmgtuzdomxbgtfcmhgfmfbpc/my-repo
+    pb://tvzddtbzbldthde5kdsvjvzpweifx7ae@example.com:57306,example.org:57306/jmxpcs6lsmgtuzdomxbgtfcmhgfmfbpc/my-repo
 
-but you could tell your clients to use this instead:
-
-    pb://tvzddtbzbldthde5kdsvjvzpweifx7ae@example.com:57306/jmxpcs6lsmgtuzdomxbgtfcmhgfmfbpc/my-repo
-
-The first big random-looking string in the FURL identifies exactly which server public key is expected: it provides cryptographic assurance that the connection will go to the right server. No certificate authorities or trusted third parties are used. The second random string is a secret "swissnum" which securely identifies the resource being accessed (in this case, a table entry which points at a git repository and a read+write/read-only mode). Knowledge of this secret enables access: to share access, share the secret (and the rest of the FURL necessary to use it), to withhold access, don't reveal the secret.
+The first big random-looking string in the FURL identifies exactly which server public key is expected: it provides cryptographic assurance that the connection will go to the right server. No certificate authorities or trusted third parties are used. The second random string is a secret "swissnum" which securely identifies the resource being accessed (in this case, a table entry which points at a git repository and a read+write/read-only mode). Knowledge of this secret enables access: to share access, share the secret (and the rest of the FURL necessary to use it); to withhold access, don't reveal the secret.
 
 ## Configuring the flappserver
 
@@ -62,7 +60,7 @@ Each flappserver has a "base directory" where it keeps all its state. `git fools
 
 If you publish multiple repositories, you might want to share flappservers between them, especially if you must configure a port forwarding for each server. To do this, first create the one shared server with Foolscap's `flappserver create BASEDIR` command, then for each new access FURL, use `git-foolscap`'s `--flappserver=BASEDIR` option:
 
-    git foolscap --flappserver=BASEDIR create read-write COMMENT
+    git foolscap --flappserver=BASEDIR create --port=ENDPOINT --location=LOCATION read-write COMMENT
 
 This will cause git-foolscap to add an entry to the flappserver in BASEDIR instead of creating and/or modifying the one in `.git/foolscap`. If you use a `@reboot` cronjob, you may want to use `flappserver start` directly, instead of `git foolscap start`.
 
