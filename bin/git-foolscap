@@ -375,10 +375,24 @@ def do_revoke(so):
     serverdir = so.parent.serverdir
     furl = so["FURL"]
     swissnum = furl.split("/")[-1]
-    for d in os.list(os.path.join(serverdir, "services")):
-        if d.startswith(swissnum):
+    found = False
+    fn = os.path.join(serverdir, "services.json")
+    try:
+        with open(fn, "r") as f:
+            services_json = json.load(f)
+    except EnvironmentError:
+        print "unable to read %s: old flappserver?" % fn
+        sys.exit(1)
+    if services_json["version"] != 1:
+        print "unrecognized flappserver version in %s" % fn
+        sys.exit(1)
+    for service_swiss, service_data in services_json["services"].items():
+        if service_swiss.startswith(swissnum):
             found = True
-            shutil.rmtree(os.path.join(serverdir, "services", d))
+            DELETE_SERVICE(service_swiss)
+            # TODO: this should really live in a "flappserver remove"
+            del services_json["services"][service_swiss]
+            save_service_data(fn, services_json)
     if found:
         print "removed %s" % swissnum
         if os.path.exists(os.path.join(serverdir, "twistd.pid")):
