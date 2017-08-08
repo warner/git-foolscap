@@ -124,7 +124,12 @@ class BaseOptions(usage.Options):
         return self.synopsis
 
 class CreateOptions(BaseOptions):
-    synopsis = "git-foolscap [--flappserver=] create read-write|read-only COMMENT"
+    synopsis = "git-foolscap [--flappserver=] create  --port= --location= read-write|read-only COMMENT"
+    optParameters = [
+        ("port", "p", "tcp:3116", "(required) TCP port to listen on (server endpoint description)"),
+        ("location", None, None, "(required) Tub location hints to use in generated FURLs, e.g. 'tcp:example.org:3116'"),
+        ]
+
     def parseArgs(self, mode=None, comment=None):
         if mode not in ("read-write", "read-only"):
             raise usage.UsageError("mode must be 'read-write' or 'read-only'")
@@ -171,7 +176,7 @@ class StopOptions(BaseOptions):
     longdesc='''Stop the flappserver.'''
 
 class Options(usage.Options):
-    synopsis = "git-foolscap [--flappserver=] (create (read-only|read-write) COMMENT)|revoke FURL|list|start|stop"
+    synopsis = "git-foolscap [--flappserver=] create|revoke FURL|list|start|stop"
     optParameters = [
         ("flappserver", None, None, "where the flappserver lives"),
         ]
@@ -217,12 +222,14 @@ def stop_server(serverdir):
 class CreateError(Exception):
     """Error creating flappserver"""
 
-def maybe_create_server(server_exists, serverdir):
+def maybe_create_server(server_exists, serverdir, port, location):
     d = fireEventually()
     def _create(ign):
         sys.stdout.write("Creating flappserver in %s\n" % serverdir)
-        d1 = cli.run_flappserver(["flappserver",
-                                  "create", "--quiet", serverdir],
+        d1 = cli.run_flappserver(["flappserver", "create",
+                                  "--port", port,
+                                  "--location", location,
+                                  "--quiet", serverdir],
                                  run_by_human=False)
         def _created((rc,out,err)):
             sys.stderr.write(err)
@@ -259,7 +266,8 @@ def do_create(so, server_exists):
     repodir = so.parent.repodir
     reponame = get_reponame(repodir)
     serverdir = so.parent.serverdir
-    d = maybe_create_server(server_exists, serverdir)
+    d = maybe_create_server(server_exists, serverdir,
+                            so["port"], so["location"])
     def _add(ign):
         read_write = (so["mode"] == "read-write")
 
