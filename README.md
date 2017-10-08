@@ -50,7 +50,7 @@ The flappserver uses the `--location=` you provide to construct the "connection 
 
 If you got the hostname wrong, or if you used an IP address and it has changed, you can edit the FURL later. You can also use multiple hints, and the client will try to connect to each of them until at least one works:
 
-    pb://tvzddtbzbldthde5kdsvjvzpweifx7ae@example.com:57306,example.org:57306/jmxpcs6lsmgtuzdomxbgtfcmhgfmfbpc/my-repo
+    pb://tvzddtbzbldthde5kdsvjvzpweifx7ae@tcp:example.com:57306,tcp:example.org:57306/jmxpcs6lsmgtuzdomxbgtfcmhgfmfbpc/my-repo
 
 The first big random-looking string in the FURL identifies exactly which server public key is expected: it provides cryptographic assurance that the connection will go to the right server. No certificate authorities or trusted third parties are used. The second random string is a secret "swissnum" which securely identifies the resource being accessed (in this case, a table entry which points at a git repository and a read+write/read-only mode). Knowledge of this secret enables access: to share access, share the secret (and the rest of the FURL necessary to use it); to withhold access, don't reveal the secret.
 
