@@ -3,9 +3,10 @@
 import os.path, sys, re, shutil
 from subprocess import Popen, PIPE
 from twisted.python import usage
+from twisted.internet.task import react
+from twisted.internet.defer import inlineCallbacks
 from foolscap.appserver import cli
 from foolscap.api import fireEventually
-from twisted.internet import reactor
 
 SYNOPSIS = '''\
 usage:
@@ -222,92 +223,69 @@ def stop_server(serverdir):
 class CreateError(Exception):
     """Error creating flappserver"""
 
+@inlineCallbacks
 def maybe_create_server(server_exists, serverdir, port, location):
-    d = fireEventually()
-    def _create(ign):
-        sys.stdout.write("Creating flappserver in %s\n" % serverdir)
-        d1 = cli.run_flappserver(["flappserver", "create",
-                                  "--port", port,
-                                  "--location", location,
-                                  "--quiet", serverdir],
-                                 run_by_human=False)
-        def _created((rc,out,err)):
-            sys.stderr.write(err)
-            if rc != 0:
-                sys.stdout.write(out)
-                raise CreateError()
-        d1.addCallback(_created)
-        return d1
+    yield fireEventually()
     if not server_exists:
         # we need to create it. This needs a reactor turn
-        d.addCallback(_create)
-    def _check_umask(ign):
-        if not os.path.exists(os.path.join(serverdir, "umask")):
-            print >>sys.stderr, "flappserver doesn't have --umask set: consider setting it to 022, otherwise permissions on working files may be messed up"
-    d.addCallback(_check_umask)
-    return d
+        sys.stdout.write("Creating flappserver in %s\n" % serverdir)
+        res = yield cli.run_flappserver(["flappserver", "create",
+                                        "--port", port,
+                                        "--location", location,
+                                        "--quiet", serverdir],
+                                        run_by_human=False)
+        (rc, out, err) = res
+        sys.stderr.write(err)
+        if rc != 0:
+            sys.stdout.write(out)
+            raise CreateError()
+    if not os.path.exists(os.path.join(serverdir, "umask")):
+        print >>sys.stderr, "flappserver doesn't have --umask set: consider setting it to 022, otherwise permissions on working files may be messed up"
 
-def run_reactor_and_exit(d):
-    stash_rc = []
-    def good(rc):
-        stash_rc.append(rc)
-        reactor.stop()
-    def oops(f):
-        print "Command failed:"
-        print f
-        stash_rc.append(-1)
-        reactor.stop()
-    d.addCallbacks(good, oops)
-    d.addErrback(oops)
-    reactor.run()
-    sys.exit(stash_rc[0])
-
-def do_create(so, server_exists):
+@inlineCallbacks
+def do_create(reactor, so, server_exists):
     repodir = so.parent.repodir
     reponame = get_reponame(repodir)
     serverdir = so.parent.serverdir
-    d = maybe_create_server(server_exists, serverdir,
-                            so["port"], so["location"])
-    def _add(ign):
-        read_write = (so["mode"] == "read-write")
+    yield maybe_create_server(server_exists, serverdir,
+                              so["port"], so["location"])
+    read_write = (so["mode"] == "read-write")
 
-        comment = "allow read "
-        if read_write:
-            comment += "(and write) "
-        comment += "access to the Git repository at %s" % repodir
-        if so["comment"]:
-            comment += " (%s)" % so["comment"]
+    comment = "allow read "
+    if read_write:
+        comment += "(and write) "
+    comment += "access to the Git repository at %s" % repodir
+    if so["comment"]:
+        comment += " (%s)" % so["comment"]
 
-        # git-upload-pack handles "git fetch" and "git ls-remote"
-        git_services = ["git-upload-pack"]
-        # git-upload-archive handles "git archive --remote"
-        if read_write:
-            git_services.append("git-receive-pack")
+    # git-upload-pack handles "git fetch" and "git ls-remote"
+    git_services = ["git-upload-pack"]
+    # git-upload-archive handles "git archive --remote"
+    if read_write:
+        git_services.append("git-receive-pack")
 
-        base_swissnum = cli.make_swissnum() + "/" + reponame
+    base_swissnum = cli.make_swissnum() + "/" + reponame
 
-        # each git command gets a sub-FURL
-        for git_service in git_services:
-            swissnum = "%s-%s" % (base_swissnum, git_service)
-            args = ["--accept-stdin", "/"]
-            args.append(git_service)
-            if git_service == "git-upload-pack":
-                args.extend(["--strict", "--timeout=600"])
-            args.append(repodir)
-            furl,servicedir = cli.add_service(serverdir, "run-command",
-                                              args, comment, swissnum)
+    # each git command gets a sub-FURL
+    for git_service in git_services:
+        swissnum = "%s-%s" % (base_swissnum, git_service)
+        args = ["--accept-stdin", "/"]
+        args.append(git_service)
+        if git_service == "git-upload-pack":
+            args.extend(["--strict", "--timeout=600"])
+        args.append(repodir)
+        furl,servicedir = cli.add_service(serverdir, "run-command",
+                                          args, comment, swissnum)
 
-        # use the last furl/swissnum pair to figure out the base FURL.
-        # Note that this isn't a real FURL: you must append one of the
-        # accepted git-command-name strings to hit a real object.
-        assert furl.endswith(swissnum)
-        chop = len(swissnum) - len(base_swissnum)
-        furl = furl[:-chop]
+    # use the last furl/swissnum pair to figure out the base FURL.
+    # Note that this isn't a real FURL: you must append one of the
+    # accepted git-command-name strings to hit a real object.
+    assert furl.endswith(swissnum)
+    chop = len(swissnum) - len(base_swissnum)
+    furl = furl[:-chop]
 
-        print "%s FURL added:" % so["mode"]
-        print furl
-    d.addCallback(_add)
-    run_reactor_and_exit(d)
+    print "%s FURL added:" % so["mode"]
+    print furl
 
 def do_revoke(so):
     serverdir = so.parent.serverdir
@@ -370,7 +348,7 @@ def run():
     so = o.subOptions
 
     if command == "create":
-        return do_create(so, server_exists)
+        return react(do_create, (so, server_exists))
 
     if not server_exists:
         raise usage.UsageError("serverdir doesn't exist")
