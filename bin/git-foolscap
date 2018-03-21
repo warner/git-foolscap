@@ -2,6 +2,7 @@
 
 import os.path, sys, re, shutil
 from subprocess import Popen, PIPE
+from collections import namedtuple
 from twisted.python import usage
 from twisted.internet.task import react
 from twisted.internet.defer import inlineCallbacks
@@ -387,10 +388,11 @@ def do_revoke(so):
         print "No such FURL found!"
         sys.exit(1)
 
-def do_list(so):
-    serverdir = so.parent.serverdir
+Service = namedtuple("Service", ["furl", "comment"])
+
+def list_services(serverdir):
     services = cli.list_services(serverdir)
-    found = {}
+    found = []
     for s in services:
         if s.service_type != "run-command":
             pass
@@ -403,12 +405,18 @@ def do_list(so):
         # client adds one or the other depending upon what it's trying to do
         mo = re.search(r"(.*)-git-(upload|receive)-pack$", s.furl)
         base_furl = mo.group(1)
-        found[base_furl] = s.comment # possibly None
-    for furl in sorted(found.keys()):
-        print furl
-        comment = found[furl]
-        if comment:
-            print " "+comment
+        found.append(Service(furl=base_furl, comment=s.comment))
+    found.sort(key=lambda s: s.furl)
+    return found
+
+def do_list(so):
+    serverdir = so.parent.serverdir
+    services = list_services(serverdir)
+    for i, s in enumerate(services):
+        print "#%d:" % i
+        print " ", s.furl
+        if s.comment:
+            print "  ", s.comment
         print
     if not services:
         print "no git-foolscap FURLs configured"
