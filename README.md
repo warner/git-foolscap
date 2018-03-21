@@ -28,13 +28,24 @@ Technically, this means that servers only need the `git-foolscap` executable, an
 
 ## Usage: Server
 
-To provide read-only access to a single repository, run `git foolscap create --port=ENDPOINT --location=HINT read-only COMMENT` from within the repo's directory. "COMMENT" should be a single string (with quotes if it includes spaces) that reminds you about who you're providing access to: it will be recorded and made available to `git foolscap list` later, in case you want to selectively revoke acess in the future. `create` will print the FURL that should be delivered to your clients.
+See `git foolscap --help` for full details. Basically the server does this part once:
 
-`ENDPOINT` tells the server what TCP port to listen on, and should look something like `tcp:12345`. `HINT` tells it what network location to advertise, for which you'll need to know an externally-reachable hostname or IP address. The hint should look something like `tcp:example.org:12345`. Both must be supplied.
+```
+% git foolscap init --port=tcp:3116 --location=tcp:HOSTNAME:3116
+% git foolscap start
+```
 
-Then run `git foolscap start` to launch the server.
+and this part for each new client:
 
-You can create as many FURLs as you like, by running `git foolscap create` multiple times. Each can be revoked separately. Use `git foolscap list` to see them all, and `git foolscap revoke` to revoke one.
+```
+% git foolscap invite read-write "comment about recipient"
+```
+
+The "invite" will produce a "wormhole code", which the receiving user must type into their "accept" command. The secure FURL will then be sent through the wormhole.
+
+The FURLs can also be added (without invitation) using `git foolscap add`. It must then be cut-and-pasted to the recipient.
+
+To provide read-only access to a single repository, replace `read-write` with `read-only`. You can create as many FURLs as you like, by running `git foolscap add` or `invite` multiple times. Each can be revoked separately. To revoke access, run `git foolscap list`, find the index number, and pass it into `git foolscap revoke`.
 
 You may want to arrange for `git foolscap start` to be run from a cron `@reboot` job, or other boot-time startup script, to make sure that access is retained across a system reboot.
 
@@ -42,7 +53,21 @@ You may want to arrange for `git foolscap start` to be run from a cron `@reboot`
 
 ## Usage: Client
 
-Once someone gives you a FURL, you can simply clone from it as you would a normal HTTPS (`https://github.com/warner/git-foolscap.git`) or SSH (`git@github.com:warner/git-foolscap.git`) URL. As long as you have git-foolscap installed, git will figure out how to do the right thing.
+If the repository owner used `git foolscap invite`, then you simply type this code into:
+
+```
+% git foolscap accept clone
+```
+
+The client can use tab-completion on the codewords, and the wordlist is specifically designed to be reliably transcribeable over a noisy voice channel. 
+
+Instead of cloning a new copy of the repository, you can add the new FURL to an existing repo, by running this command from inside the repository:
+
+```
+% git foolscap accept add-remote
+```
+
+If the publisher used `git foolscap add` and sent you a full FURL (instead of a wormhole code), then you can just clone from it as you would a normal HTTPS (`https://github.com/warner/git-foolscap.git`) or SSH (`git@github.com:warner/git-foolscap.git`) URL. As long as you have git-foolscap installed, git will figure out how to do the right thing.
 
 ## Cleaning up the FURL
 
@@ -58,13 +83,11 @@ The first big random-looking string in the FURL identifies exactly which server 
 
 Each flappserver has a "base directory" where it keeps all its state. `git foolscap create` defaults to using `.git/foolscap/` for this purpose, creating it if necessary, then adding an entry for the new FURL.
 
-If you publish multiple repositories, you might want to share flappservers between them, especially if you must configure a port forwarding for each server. To do this, first create the one shared server with Foolscap's `flappserver create BASEDIR` command, then for each new access FURL, use `git-foolscap`'s `--flappserver=BASEDIR` option:
+If you publish multiple repositories, you might want to share flappservers between them, especially if you must configure a port forwarding for each server. To do this, first create the one shared server with Foolscap's `flappserver create BASEDIR` command, then use the `--flappserver=BASEDIR` argument when running `git foolscap init`. This establishes a symlink from `.git/foolscap` to the real BASEDIR, so subsequent git-foolscap commands will add an entry to that flappserver directly. If BASEDIR doesn't already exist, it will be created.
 
-    git foolscap --flappserver=BASEDIR create --port=ENDPOINT --location=LOCATION read-write COMMENT
+Note that at present, `git foolscap init --flappserver=BASEDIR` requires the `--port=` and `--location=` arguments, even if BASEDIR already exists. However, in that case, their values are ignored in favor of the BASEDIR's existing configuration. Hopefully this will be fixed in a future release.
 
-This will cause git-foolscap to add an entry to the flappserver in BASEDIR instead of creating and/or modifying the one in `.git/foolscap`. If you use a `@reboot` cronjob, you may want to use `flappserver start` directly, instead of `git foolscap start`.
-
-If you create the flappserver with `flappserver create`, you can provide options to set the published location, or the port on which it will listen. See `flappserver create --help` for details. You can also edit the config files inside the flappserver directory after creation (`port` controls what TCP port the server listens on, and `furl_prefix` is used when generating new FURLs).
+If you use a `@reboot` cronjob, you may want to use `flappserver start` directly, instead of `git foolscap start`.
 
 ## Bugs, Patches
 
