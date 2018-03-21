@@ -10,14 +10,12 @@ from foolscap.api import fireEventually
 
 SYNOPSIS = '''\
 usage:
- git-foolscap [--flappserver=] create read-only|read-write COMMENT
- git-foolscap [--flappserver=] start
- git-foolscap [--flappserver=] stop
- git-foolscap [--flappserver=] list
- git-foolscap [--flappserver=] revoke FURL
-
-    --flappserver   Use a pre-configured flappserver directory instead of
-                    .git/foolscap
+ git-foolscap init [--flappserver=] --port= --location=
+ git-foolscap add read-only|read-write COMMENT
+ git-foolscap start
+ git-foolscap stop
+ git-foolscap list
+ git-foolscap revoke FURL
 '''
 SHORTHELP = '''\
 Use this tool to publish a git repository via a Foolscap application server
@@ -124,13 +122,36 @@ class BaseOptions(usage.Options):
         # synopsis, which looks weird
         return self.synopsis
 
-class CreateOptions(BaseOptions):
-    synopsis = "git-foolscap [--flappserver=] create  --port= --location= read-write|read-only COMMENT"
+class InitOptions(BaseOptions):
+    synopsis = "git-foolscap init [--flappserver=] --port= --location="
     optParameters = [
-        ("port", "p", "tcp:3116", "(required) TCP port to listen on (server endpoint description)"),
-        ("location", None, None, "(required) Tub location hints to use in generated FURLs, e.g. 'tcp:example.org:3116'"),
+        ("flappserver", "s", None,
+         "location of the server directory, defaults to GITDIR/foolscap"),
+        ("port", "p", "tcp:3116",
+         "(required) TCP port to listen on (server endpoint description)"),
+        ("location", None, None,
+         "(required) Tub location hints to use in generated FURLs, e.g. 'tcp:example.org:3116'"),
         ]
 
+    longdesc='''\
+Prepare a Git repository for access by Foolscap FURLs.
+
+By default, this creates a foolscap "flappserver" inside the .git directory (at
+.git/foolscap). This can be created elsewhere by using e.g.
+--flappserver=~/.flappserver , which may be useful if you want to share the
+server between multiple repositories. In this case, a symlink from
+.git/foolscap to the --flappserver directory will be created. If the target
+server already exists, it will not be modified, but the symlink will still be
+created.
+
+If the server is being created, it must be given a --port and --location. The
+port is where the server listens: "tcp:3116" is the default. Location is how
+clients are instructed to reach it, which typically consists of
+type/hostname/port, like "tcp:example.com:3116". If the server already exists,
+these arguments are ignored.
+'''
+
+class BaseAddOptions(BaseOptions):
     def parseArgs(self, mode=None, comment=None):
         if mode not in ("read-write", "read-only"):
             raise usage.UsageError("mode must be 'read-write' or 'read-only'")
@@ -138,19 +159,25 @@ class CreateOptions(BaseOptions):
         if not comment:
             raise usage.UsageError("comment is required")
         self["comment"] = comment
-    longdesc='''Create a new repository-accessing FURL, using the server
-    given by the --flappserver= option (which defaults to .git/foolscap),
-    creating the server if necessary. If the mode is "read-write", the furl
-    will have full pull and push authority. If the mode is "read-only", the
-    furl will only be able to pull from this repo.
 
-    The COMMENT (which is mandatory) is recorded along with the furl and
-    displayed in "git-foolcap list", which may help you remember who has
-    which furl so you can later do "git-foolscap revoke" on the right one.
-    '''
+class AddOptions(BaseAddOptions):
+    synopsis = "git-foolscap add read-write|read-only COMMENT"
+
+    longdesc='''\
+Add a new FURL for accessing this repository, in some particular mode.
+
+Create a new repository-accessing FURL. If the mode is "read-write", the furl
+will have full pull and push authority. If the mode is "read-only", the furl
+will only be able to pull from this repo.
+
+The COMMENT (which is mandatory) is recorded along with the furl and
+displayed in "git-foolcap list", which may help you remember who has
+which furl so you can later do "git-foolscap revoke" on the right one.
+'''
+
 
 class RevokeOptions(BaseOptions):
-    synopsis = "git-foolscap [--flappserver=] revoke FURL"
+    synopsis = "git-foolscap revoke FURL"
 
     def parseArgs(self, FURL=None):
         if not FURL:
@@ -161,11 +188,11 @@ class RevokeOptions(BaseOptions):
     Use "git-foolscap list" to get a list of revocable FURLs.'''
 
 class ListOptions(BaseOptions):
-    synopsis = "git-foolscap [--flappserver=] list"
+    synopsis = "git-foolscap list"
     longdesc='''List all FURLs previously created, with their comments.'''
 
 class StartOptions(BaseOptions):
-    synopsis = "git-foolscap [--flappserver=] start"
+    synopsis = "git-foolscap start"
     longdesc='''Start the flappserver. Must be done before clients can
     connect.
 
@@ -173,16 +200,14 @@ class StartOptions(BaseOptions):
     with a crontab entry like "@reboot git-foolscap start GITREPO"'''
 
 class StopOptions(BaseOptions):
-    synopsis = "git-foolscap [--flappserver=] stop"
+    synopsis = "git-foolscap stop"
     longdesc='''Stop the flappserver.'''
 
 class Options(usage.Options):
-    synopsis = "git-foolscap [--flappserver=] create|revoke FURL|list|start|stop"
-    optParameters = [
-        ("flappserver", None, None, "where the flappserver lives"),
-        ]
+    synopsis = "git-foolscap init|add|revoke FURL|list|start|stop"
 
-    subCommands = [("create", None, CreateOptions, "Publish a new FURL"),
+    subCommands = [("init", None, InitOptions, "Initialize a repo for publishing"),
+                   ("add", None, AddOptions, "Publish a new FURL"),
                    ("revoke", None, RevokeOptions, "Revoke a previous FURL"),
                    ("list", None, ListOptions, "List all active FURLs"),
                    ("start", None, StartOptions, "Start the server"),
@@ -198,10 +223,7 @@ class Options(usage.Options):
 
     def postOptions(self):
         self.repodir = get_repodir()
-        if self["flappserver"]:
-            self.serverdir = os.path.expanduser(self["flappserver"])
-        else:
-            self.serverdir = os.path.join(self.repodir, "foolscap")
+        self.serverdir = os.path.join(self.repodir, "foolscap") # maybe symlink
 
 def restart_server(serverdir):
     stop_options = cli.StopOptions()
@@ -223,32 +245,48 @@ def stop_server(serverdir):
 class CreateError(Exception):
     """Error creating flappserver"""
 
+
 @inlineCallbacks
-def maybe_create_server(server_exists, serverdir, port, location):
-    yield fireEventually()
-    if not server_exists:
+def do_init(reactor, so, server_exists):
+    if so["flappserver"] is not None:
+        real_serverdir = os.path.abspath(os.path.expanduser(so["flappserver"]))
+    else:
+        real_serverdir = os.path.join(so.parent.repodir, "foolscap")
+
+    real_server_exists = os.path.exists(os.path.join(real_serverdir,
+                                                     "flappserver.tac"))
+    if not real_server_exists:
+        yield fireEventually()
         # we need to create it. This needs a reactor turn
-        sys.stdout.write("Creating flappserver in %s\n" % serverdir)
+        sys.stdout.write("Creating flappserver in %s\n" % real_serverdir)
         res = yield cli.run_flappserver(["flappserver", "create",
-                                        "--port", port,
-                                        "--location", location,
-                                        "--quiet", serverdir],
+                                        "--port", so["port"],
+                                        "--location", so["location"],
+                                        "--quiet", real_serverdir],
                                         run_by_human=False)
         (rc, out, err) = res
         sys.stderr.write(err)
         if rc != 0:
             sys.stdout.write(out)
             raise CreateError()
-    if not os.path.exists(os.path.join(serverdir, "umask")):
+
+    if not os.path.exists(os.path.join(real_serverdir, "umask")):
         print >>sys.stderr, "flappserver doesn't have --umask set: consider setting it to 022, otherwise permissions on working files may be messed up"
 
-@inlineCallbacks
-def do_create(reactor, so, server_exists):
+    if so["flappserver"] is not None:
+        linkpath = so.parent.serverdir
+        if os.path.isdir(linkpath):
+            print "error, %s already exists (as a flappserver directory), I cannot make it into a symlink to %s" % (linkpath, real_serverdir)
+        if not os.path.islink(linkpath):
+            os.symlink(real_serverdir, linkpath)
+            print "symlink from .git/foolscap to %s added" % (real_serverdir,)
+
+    print "git-foolscap server initialized"
+
+def do_add(so):
     repodir = so.parent.repodir
     reponame = get_reponame(repodir)
     serverdir = so.parent.serverdir
-    yield maybe_create_server(server_exists, serverdir,
-                              so["port"], so["location"])
     read_write = (so["mode"] == "read-write")
 
     comment = "allow read "
@@ -286,6 +324,7 @@ def do_create(reactor, so, server_exists):
 
     print "%s FURL added:" % so["mode"]
     print furl
+
 
 def do_revoke(so):
     serverdir = so.parent.serverdir
@@ -347,13 +386,16 @@ def run():
         sys.exit(0)
     so = o.subOptions
 
-    if command == "create":
-        return react(do_create, (so, server_exists))
+    if command == "init":
+        return react(do_init, (so, server_exists))
 
     if not server_exists:
-        raise usage.UsageError("serverdir doesn't exist")
+        print >>sys.stderr, "serverdir missing, please use 'git-foolscap init' first"
+        sys.exit(1)
 
-    if command == "revoke":
+    if command == "add":
+        return do_add(so)
+    elif command == "revoke":
         return do_revoke(so)
     elif command == "list":
         return do_list(so)
