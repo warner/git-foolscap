@@ -13,11 +13,13 @@ import wormhole
 SYNOPSIS = '''\
 usage:
  git-foolscap init [--flappserver=] --port= --location=
- git-foolscap add read-only|read-write COMMENT
  git-foolscap start
  git-foolscap stop
+ git-foolscap add read-only|read-write COMMENT
+ git-foolscap invite read-only|read-write COMMENT
  git-foolscap list
  git-foolscap revoke FURL
+ git-foolscap accept clone|add-remote
 '''
 SHORTHELP = '''\
 Use this tool to publish a git repository via a Foolscap application server
@@ -35,27 +37,27 @@ Use this tool to publish a git repository via a Foolscap application server
 a "FURL". You can then use this FURL as a git URL on any client which has the
 "git-remote-pb" helper installed.
 
+You can also use "invite" and "accept" to deliver the FURL via a secure
+protocol named "Magic-Wormhole". This prints a short string which you can read
+to the recipient. This requires the sender to leave "git-foolscap invite"
+running until the recipient has executed "git-foolscap accept".
+
 These FURLs provide cryptographically-secure access to a specific resource.
 Unlike SSH keys, the holder of this FURL is limited to a single command (e.g.
 git receive-pack). This is safer and easier to configure than putting
 command/environment restrictions on an SSH key, and does not require running
 a daemon as root.
 
-To publish a git repo, run:
+To publish a git repo, first prepare the server. You must pick a TCP port to
+listen on, and you need to know the hostname by which clients can reach your
+computer.
 
- git foolscap create read-only|read-write "for Bob"
+ git foolscap init --port tcp:3116 --location tcp:example.com:3116
 
-That command will emit a FURL. Simply give this FURL to somebody via a secure
-channel and have them run "git remote add NAME FURL". Remind them to install
-Foolscap and the "git-remote-pb" program. The comment, which follows the
-mode, is mandatory, and is recorded locally to help you remember who you gave
-the FURL to.
-
-
-This tool helps create a daemon that listens for inbound Foolscap
-connections. The daemon must be running and reachable by your clients. A
-working directory for the daemon is created in .git/foolscap . You must start
-the daemon before clients can use it:
+This creates a daemon that listens for inbound Foolscap connections. The daemon
+must be running and reachable by your clients. A working directory for the
+daemon is created in .git/foolscap . You must start the daemon before clients
+can use it:
 
  git foolscap start
 
@@ -66,30 +68,49 @@ this:
 
  @reboot cd PATH/TO/REPO && git foolscap start
 
-The server this tool creates is known as a "flappserver", and Foolscap has a
-number of tools to work with them. You may have already created a
-flappserver, in which case you can tell git-foolscap to use that one instead
-of creating a brand new one. To do that, use --flappserver like so:
+Now use the "add" command to grant read-write access to the repository.
 
- git foolscap --flappserver=~/.flappserver create read-only "for Alice"
-
-The published FURL will either be limited to read-only operations, or it will
-allow both read and write (i.e. clients can push into this repo). You must
-choose one or the other when you create the FURL. Note that you can easily
-create multiple FURLs for the same repo, some read-only, others read-write.
-
- git foolscap create read-only for-Alice
  git foolscap create read-write "for Bob"
+
+That command will emit a FURL. Simply give this FURL to somebody via a secure
+channel and have them run "git remote add NAME FURL". Remind them to install
+Foolscap and the "git-remote-pb" program. The comment, which follows the
+mode, is mandatory, and is recorded locally to help you remember who you gave
+the FURL to.
+
+You can grant read-only access too:
+
+ git foolscap create read-only "for Carol"
+
+To use the invitation mechanism, use the "invite" command:
+
+ git foolscap invite read-write "for Dave"
+
+This produces a "wormhole code" instead of a FURL (the FURL is delivered
+through the wormhole). Dave can then clone the repo by typing this code into:
+
+ git foolscap accept clone
+
+Or Dave can add the FURL to an existing repo with:
+
+ git foolscap accept add-remote
+
+
+Each FURL will either be limited to read-only operations, or it will allow both
+read and write (i.e. clients can push into this repo). You must choose one or
+the other when you create the FURL. Note that you can easily create multiple
+FURLs for the same repo, some read-only, others read-write.
+
+ git foolscap add read-only for-Alice
+ git foolscap add read-write "for Bob"
 
 You can revoke any FURL, to shut off access by whoever you gave that FURL to.
 It is useful to create a new FURL for each client, so you can revoke them
-separately.
-
- git foolscap revoke FURL
-
-To list all the FURLs that are enabled, use "list":
+separately. The "list" command will display an integer index for each FURL, and
+you'll use that index to revoke them.
 
  git foolscap list
+ git foolscap revoke 2
 '''
 
 def probably_git_repo(repodir):
@@ -225,7 +246,7 @@ class StopOptions(BaseOptions):
     longdesc='''Stop the flappserver.'''
 
 class Options(usage.Options):
-    synopsis = "git-foolscap init|add|revoke FURL|list|start|stop"
+    synopsis = "git-foolscap init|start|stop|add|list|revoke|invite|accept"
 
     subCommands = [("init", None, InitOptions, "Initialize a repo for publishing"),
                    ("invite", None, InviteOptions, "Extend invitation"),
