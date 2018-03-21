@@ -7,6 +7,7 @@ from twisted.internet.task import react
 from twisted.internet.defer import inlineCallbacks
 from foolscap.appserver import cli
 from foolscap.api import fireEventually
+import wormhole
 
 SYNOPSIS = '''\
 usage:
@@ -175,6 +176,24 @@ displayed in "git-foolcap list", which may help you remember who has
 which furl so you can later do "git-foolscap revoke" on the right one.
 '''
 
+class InviteOptions(BaseAddOptions):
+    synopsis = "git-foolscap invite read-write|read-only COMMENT"
+
+class AcceptOptions(BaseOptions):
+    synopsis = "git-foolscap accept clone|add-remote [--remote=] [git args..]"
+    optParameters = [
+        ("remote", None, None, "Name of the new git remote"),
+        ]
+    def parseArgs(self, command, *gitargs):
+        if command not in ("clone", "add-remote"):
+            raise usage.UsageError("command must be 'clone' or 'add-remote'")
+        self["command"] = command
+        if self["remote"] is None:
+            if command == "clone":
+                self["remote"] = "origin"
+            else:
+                self["remote"] = "furl"
+
 
 class RevokeOptions(BaseOptions):
     synopsis = "git-foolscap revoke FURL"
@@ -207,11 +226,14 @@ class Options(usage.Options):
     synopsis = "git-foolscap init|add|revoke FURL|list|start|stop"
 
     subCommands = [("init", None, InitOptions, "Initialize a repo for publishing"),
+                   ("invite", None, InviteOptions, "Extend invitation"),
                    ("add", None, AddOptions, "Publish a new FURL"),
                    ("revoke", None, RevokeOptions, "Revoke a previous FURL"),
                    ("list", None, ListOptions, "List all active FURLs"),
                    ("start", None, StartOptions, "Start the server"),
                    ("stop", None, StopOptions, "Stop the server"),
+
+                   ("accept", None, AcceptOptions, "Accept invitation"),
                    ]
 
     def opt_h(self):
@@ -324,6 +346,30 @@ def do_add(so):
     print "%s FURL added:" % so["mode"]
     print furl
 
+APPID = u"lothar.com/git-foolscap/v1"
+MAILBOX_SERVER = u"ws://relay.magic-wormhole.io:4000/v1"
+
+@inlineCallbacks
+def do_invite(reactor, so):
+    print "Generating new %s FURL '%s'" % (so["mode"], so["comment"])
+    furl = add(so)
+    print 'Please run "git foolscap accept clone" to make a new repo,'
+    print 'or "git foolscap accept add-remote" to add a remote to an existing repo.'
+    w = wormhole.create(APPID, MAILBOX_SERVER, reactor)
+    w.allocate_code()
+    code = yield w.get_code()
+    print "The wormhole code is:"
+    print
+    print " ", code
+    print
+    print "Waiting for client to accept.."
+    # TODO: make sure the server is running, else "clone" will fail as it tries
+    # to immediately use the FURL
+    w.send_message(furl)
+    ack = yield w.get_message()
+    print "Client says:", ack
+    yield w.close()
+
 def do_revoke(so):
     serverdir = so.parent.serverdir
     furl = so["FURL"]
@@ -363,6 +409,27 @@ def do_list(so):
     if not services:
         print "no git-foolscap FURLs configured"
 
+@inlineCallbacks
+def do_accept(reactor, so):
+    w = wormhole.create(APPID, MAILBOX_SERVER, reactor)
+    wormhole.input_with_completion("Please enter the wormhole code: ",
+                                   w.input_code(), reactor)
+    furl = yield w.get_message()
+    print "got FURL:", furl
+    if so["command"] == "clone":
+        cmd = ("git", "clone", "--origin", so["remote"], furl)
+    else:
+        print "adding new remote named %s" % so["remote"]
+        cmd = ("git", "remote", "add", so["remote"], furl)
+    p = Popen(cmd)
+    p.communicate()
+    if p.returncode != 0:
+        ack = "problems running git"
+    else:
+        ack = "ok"
+    w.send_message(ack)
+    yield w.close()
+
 def run():
     o = Options()
     try:
@@ -382,6 +449,9 @@ def run():
         sys.exit(0)
     so = o.subOptions
 
+    if command == "accept":
+        return react(do_accept, (so,))
+
     # all subsequent commands must be run from an existing git repo
 
     o.repodir = get_repodir()
@@ -398,6 +468,8 @@ def run():
 
     if command == "add":
         return do_add(so)
+    elif command == "invite":
+        return react(do_invite, (so,))
     elif command == "revoke":
         return do_revoke(so)
     elif command == "list":

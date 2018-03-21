@@ -25,7 +25,9 @@ Tools to run Git over Foolscap FURLs.
         ],
     'platforms': ["any"],
 
-    'install_requires': ["foolscap >= 0.8.0"],
+    'install_requires': ["foolscap >= 0.8.0",
+                         "magic-wormhole >= 0.10.5",
+                         ],
 
     'scripts': ["bin/git-foolscap", "bin/git-remote-pb"],
 
