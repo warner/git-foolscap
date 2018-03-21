@@ -1,3 +1,3 @@
-include README.md
+include README.md NEWS.md
 include versioneer.py
 include _version.py
