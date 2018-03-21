@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import os.path, sys, re, shutil
+import os.path, sys, re, shutil, json
 from subprocess import Popen, PIPE
 from collections import namedtuple
 from twisted.python import usage
@@ -197,15 +197,16 @@ class AcceptOptions(BaseOptions):
 
 
 class RevokeOptions(BaseOptions):
-    synopsis = "git-foolscap revoke FURL"
+    synopsis = "git-foolscap revoke WHICH"
 
-    def parseArgs(self, FURL=None):
-        if not FURL:
-            raise usage.UsageError("FURL is required")
-        self["FURL"] = FURL
+    def parseArgs(self, which=None):
+        if not which:
+            raise usage.UsageError("WHICH is required")
+        self["which"] = int(which)
 
     longdesc='''Revoke a FURL previously created with "git-foolscap create".
-    Use "git-foolscap list" to get a list of revocable FURLs.'''
+    Use "git-foolscap list" to get a list of revocable FURLs, and use the item
+    number (#1, #2, etc) as WHICH'''
 
 class ListOptions(BaseOptions):
     synopsis = "git-foolscap list"
@@ -369,12 +370,21 @@ def do_invite(reactor, so):
     w.send_message(furl)
     ack = yield w.get_message()
     print "Client says:", ack
+    # TODO: if the client says failure, maybe revoke the FURL we just created,
+    # to avoid leaving them lying around? Or let it remain, so the client can
+    # manually add it? Let the inviter choose?
     yield w.close()
 
 def do_revoke(so):
     serverdir = so.parent.serverdir
-    furl = so["FURL"]
-    swissnum = furl.split("/")[-1]
+    services = list_services(serverdir)
+    s = services[so["which"]]
+    print "deleting furl #%d: %s" % (so["which"], s.furl)
+    if s.comment:
+        print " with comment: %s" % s.comment
+    # TODO: get confirmation with input()
+
+    # s.furl is pb://TUBID@HINTS/SWISS/REPO
     found = False
     fn = os.path.join(serverdir, "services.json")
     try:
@@ -387,14 +397,21 @@ def do_revoke(so):
         print "unrecognized flappserver version in %s" % fn
         sys.exit(1)
     for service_swiss, service_data in services_json["services"].items():
-        if service_swiss.startswith(swissnum):
+        # service_swiss is SWISS/REPO-FACET
+        if s.furl.endswith(get_base_furl(service_swiss)):
             found = True
-            DELETE_SERVICE(service_swiss)
             # TODO: this should really live in a "flappserver remove"
+            reldir = service_data["relative_basedir"]
+            # the flappserver creates this working directory for the command,
+            # but we never use it, so it ought to be empty
+            os.rmdir(os.path.join(serverdir, reldir))
             del services_json["services"][service_swiss]
-            save_service_data(fn, services_json)
     if found:
-        print "removed %s" % swissnum
+        tmpfn = fn + ".tmp"
+        with open(tmpfn, "w") as f:
+            json.dump(services_json, f, indent=1)
+        os.rename(tmpfn, fn)
+        print "removed %s" % s.furl
         if os.path.exists(os.path.join(serverdir, "twistd.pid")):
             print "restarting server.."
             restart_server(serverdir) # never returns
@@ -404,22 +421,29 @@ def do_revoke(so):
 
 Service = namedtuple("Service", ["furl", "comment"])
 
+def get_base_furl(furl):
+    # The server-side FURLs all end with "-git-upload-pack" or
+    # "-git-receive-pack", which are read/write facets of the repo. The "FURL"
+    # we send to the client omits this suffix, and the git-remote-pb client
+    # adds one or the other depending upon what it's trying to do
+    mo = re.search(r"(.*)-git-(upload|receive)-pack$", furl)
+    assert mo, furl
+    base_furl = mo.group(1)
+    return base_furl
+
 def list_services(serverdir):
     services = cli.list_services(serverdir)
-    found = []
+    furls = {}
     for s in services:
         if s.service_type != "run-command":
             pass
         if not re.search(r'allow read (\(and write\) )?access to the Git repository at',
                          s.comment):
             pass
-        # The server-side FURLs all end with "-git-upload-pack" or
-        # "-git-receive-pack", which are read/write facets of the repo. The
-        # "FURL" we send to the client omits this suffix, and the git-remote-pb
-        # client adds one or the other depending upon what it's trying to do
-        mo = re.search(r"(.*)-git-(upload|receive)-pack$", s.furl)
-        base_furl = mo.group(1)
-        found.append(Service(furl=base_furl, comment=s.comment))
+        # merge the two read-write facet URLs
+        furls[get_base_furl(s.furl)] = s.comment
+    found = [Service(furl=furl, comment=comment)
+             for (furl, comment) in furls.items()]
     found.sort(key=lambda s: s.furl)
     return found
 
@@ -437,6 +461,8 @@ def do_list(so):
 
 @inlineCallbacks
 def do_accept(reactor, so):
+    # TODO: accept all git arguments (except URL) and pass them through to the
+    # git command
     w = wormhole.create(APPID, MAILBOX_SERVER, reactor)
     wormhole.input_with_completion("Please enter the wormhole code: ",
                                    w.input_code(), reactor)
@@ -446,6 +472,9 @@ def do_accept(reactor, so):
         cmd = ("git", "clone", "--origin", so["remote"], furl)
     else:
         print "adding new remote named %s" % so["remote"]
+        # TODO: this can't work twice with the default --remote=furl, so maybe
+        # ask git how many "furl*" remotes it already has and pick the next
+        # higher one (furl2, furl3, etc)
         cmd = ("git", "remote", "add", so["remote"], furl)
     p = Popen(cmd)
     p.communicate()
