@@ -11,9 +11,7 @@ setup_args = {
     'author_email': "warner-foolscap@lothar.com",
     'url': "https://github.com/warner/git-foolscap",
     'license': "MIT",
-    'long_description': """\
-Tools to run Git over Foolscap FURLs.
-""",
+    'long_description': open("README.md").read(),
     'classifiers': [
         "Development Status :: 3 - Alpha",
         "Operating System :: OS Independent",
@@ -25,6 +23,7 @@ Tools to run Git over Foolscap FURLs.
         ],
     'platforms': ["any"],
 
+    'python_requires': "<3.0",
     'install_requires': ["foolscap >= 0.8.0",
                          "magic-wormhole >= 0.10.5",
                          ],
