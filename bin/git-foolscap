@@ -397,8 +397,12 @@ def do_list(so):
         if not re.search(r'allow read (\(and write\) )?access to the Git repository at',
                          s.comment):
             pass
-        chop = len(s.swissnum) - s.swissnum.index("-")
-        base_furl = s.furl[:-chop]
+        # The server-side FURLs all end with "-git-upload-pack" or
+        # "-git-receive-pack", which are read/write facets of the repo. The
+        # "FURL" we send to the client omits this suffix, and the git-remote-pb
+        # client adds one or the other depending upon what it's trying to do
+        mo = re.search(r"(.*)-git-(upload|receive)-pack$", s.furl)
+        base_furl = mo.group(1)
         found[base_furl] = s.comment # possibly None
     for furl in sorted(found.keys()):
         print furl
