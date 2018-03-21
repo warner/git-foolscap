@@ -221,10 +221,6 @@ class Options(usage.Options):
         print SYNOPSIS+"\n"+LONGHELP
         sys.exit(0)
 
-    def postOptions(self):
-        self.repodir = get_repodir()
-        self.serverdir = os.path.join(self.repodir, "foolscap") # maybe symlink
-
 def restart_server(serverdir):
     stop_options = cli.StopOptions()
     stop_options.stderr = sys.stderr
@@ -247,7 +243,7 @@ class CreateError(Exception):
 
 
 @inlineCallbacks
-def do_init(reactor, so, server_exists):
+def do_init(reactor, so):
     if so["flappserver"] is not None:
         real_serverdir = os.path.abspath(os.path.expanduser(so["flappserver"]))
     else:
@@ -377,8 +373,6 @@ def run():
         print >>sys.stderr, "Error:", e
         sys.exit(1)
 
-    # make sure the flappserver exists
-    server_exists = os.path.exists(os.path.join(o.serverdir, "flappserver.tac"))
 
     command = o.subCommand
     if not command:
@@ -386,10 +380,17 @@ def run():
         sys.exit(0)
     so = o.subOptions
 
-    if command == "init":
-        return react(do_init, (so, server_exists))
+    # all subsequent commands must be run from an existing git repo
 
-    if not server_exists:
+    o.repodir = get_repodir()
+    o.serverdir = os.path.join(o.repodir, "foolscap") # maybe a symlink
+
+    if command == "init":
+        return react(do_init, (so,))
+
+    # all subsequent commands must be run from an existing git repo that has
+    # been prepared with "git-foolscap init"
+    if not os.path.exists(os.path.join(o.serverdir, "flappserver.tac")):
         print >>sys.stderr, "serverdir missing, please use 'git-foolscap init' first"
         sys.exit(1)
 
