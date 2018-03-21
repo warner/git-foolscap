@@ -279,7 +279,7 @@ def do_init(reactor, so):
 
     print "git-foolscap server initialized"
 
-def do_add(so):
+def add(so):
     repodir = so.parent.repodir
     reponame = get_reponame(repodir)
     serverdir = so.parent.serverdir
@@ -317,10 +317,12 @@ def do_add(so):
     assert furl.endswith(swissnum)
     chop = len(swissnum) - len(base_swissnum)
     furl = furl[:-chop]
+    return furl
 
+def do_add(so):
+    furl = add(so)
     print "%s FURL added:" % so["mode"]
     print furl
-
 
 def do_revoke(so):
     serverdir = so.parent.serverdir
