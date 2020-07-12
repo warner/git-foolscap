@@ -23,8 +23,8 @@ setup_args = {
         ],
     'platforms': ["any"],
 
-    'python_requires': "<3.0",
-    'install_requires': ["foolscap >= 0.8.0",
+    'python_requires': ">=3.5",
+    'install_requires': ["foolscap >= 20.4.0",
                          "magic-wormhole >= 0.10.5",
                          ],
 
