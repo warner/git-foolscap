@@ -25,10 +25,10 @@ debug = False
 while True:
     command = sys.stdin.readline().strip()
     if debug:
-        print >>sys.stderr, "COMMAND=", command
+        print("COMMAND=", command, file=sys.stderr)
     if command == "capabilities":
-        print "*connect"
-        print
+        print("*connect")
+        print()
         sys.stdout.flush()
         continue
     if command.startswith("connect"):
@@ -36,13 +36,13 @@ while True:
         furl = "%s-%s" % (base_furl, service)
         sys.argv = ["flappclient", "--furl", furl, "run-command"]
         if debug:
-            print >>sys.stderr, "becoming flappclient"
-        print # this means "connection established"
+            print("becoming flappclient", file=sys.stderr)
+        print() # this means "connection established"
         sys.stdout.flush()
         run_flappclient()
         # that never returns
-        print >>sys.stderr, "hey, run_flappclient returned"
+        print("hey, run_flappclient returned", file=sys.stderr)
         sys.exit(1) # make it obvious
-    print >>sys.stderr, "Unknown command '%s'" % command
+    print("Unknown command '%s'" % command, file=sys.stderr)
     sys.exit(1)
 

@@ -260,10 +260,10 @@ class Options(usage.Options):
                    ]
 
     def opt_h(self):
-        print SYNOPSIS+"\n"+SHORTHELP
+        print(SYNOPSIS+"\n"+SHORTHELP)
         sys.exit(0)
     def opt_help(self):
-        print SYNOPSIS+"\n"+LONGHELP
+        print(SYNOPSIS+"\n"+LONGHELP)
         sys.exit(0)
 
 def restart_server(serverdir):
@@ -312,17 +312,17 @@ def do_init(reactor, so):
             raise CreateError()
 
     if not os.path.exists(os.path.join(real_serverdir, "umask")):
-        print >>sys.stderr, "flappserver doesn't have --umask set: consider setting it to 022, otherwise permissions on working files may be messed up"
+        print("flappserver doesn't have --umask set: consider setting it to 022, otherwise permissions on working files may be messed up", file=sys.stderr)
 
     if so["flappserver"] is not None:
         linkpath = so.parent.serverdir
         if os.path.isdir(linkpath):
-            print "error, %s already exists (as a flappserver directory), I cannot make it into a symlink to %s" % (linkpath, real_serverdir)
+            print("error, %s already exists (as a flappserver directory), I cannot make it into a symlink to %s" % (linkpath, real_serverdir))
         if not os.path.islink(linkpath):
             os.symlink(real_serverdir, linkpath)
-            print "symlink from .git/foolscap to %s added" % (real_serverdir,)
+            print("symlink from .git/foolscap to %s added" % (real_serverdir,))
 
-    print "git-foolscap server initialized"
+    print("git-foolscap server initialized")
 
 def add(so):
     repodir = so.parent.repodir
@@ -366,31 +366,31 @@ def add(so):
 
 def do_add(so):
     furl = add(so)
-    print "%s FURL added:" % so["mode"]
-    print furl
+    print("%s FURL added:" % so["mode"])
+    print(furl)
 
 APPID = u"lothar.com/git-foolscap/v1"
 MAILBOX_SERVER = u"ws://relay.magic-wormhole.io:4000/v1"
 
 @inlineCallbacks
 def do_invite(reactor, so):
-    print "Generating new %s FURL '%s'" % (so["mode"], so["comment"])
+    print("Generating new %s FURL '%s'" % (so["mode"], so["comment"]))
     furl = add(so)
-    print 'Please run "git foolscap accept clone" to make a new repo,'
-    print 'or "git foolscap accept add-remote" to add a remote to an existing repo.'
+    print('Please run "git foolscap accept clone" to make a new repo,')
+    print('or "git foolscap accept add-remote" to add a remote to an existing repo.')
     w = wormhole.create(APPID, MAILBOX_SERVER, reactor)
     w.allocate_code()
     code = yield w.get_code()
-    print "The wormhole code is:"
-    print
-    print " ", code
-    print
-    print "Waiting for client to accept.."
+    print("The wormhole code is:")
+    print()
+    print(" ", code)
+    print()
+    print("Waiting for client to accept..")
     # TODO: make sure the server is running, else "clone" will fail as it tries
     # to immediately use the FURL
     w.send_message(furl)
     ack = yield w.get_message()
-    print "Client says:", ack
+    print("Client says:", ack)
     # TODO: if the client says failure, maybe revoke the FURL we just created,
     # to avoid leaving them lying around? Or let it remain, so the client can
     # manually add it? Let the inviter choose?
@@ -400,9 +400,9 @@ def do_revoke(so):
     serverdir = so.parent.serverdir
     services = list_services(serverdir)
     s = services[so["which"]]
-    print "deleting furl #%d: %s" % (so["which"], s.furl)
+    print("deleting furl #%d: %s" % (so["which"], s.furl))
     if s.comment:
-        print " with comment: %s" % s.comment
+        print(" with comment: %s" % s.comment)
     # TODO: get confirmation with input()
 
     # s.furl is pb://TUBID@HINTS/SWISS/REPO
@@ -412,10 +412,10 @@ def do_revoke(so):
         with open(fn, "r") as f:
             services_json = json.load(f)
     except EnvironmentError:
-        print "unable to read %s: old flappserver?" % fn
+        print("unable to read %s: old flappserver?" % fn)
         sys.exit(1)
     if services_json["version"] != 1:
-        print "unrecognized flappserver version in %s" % fn
+        print("unrecognized flappserver version in %s" % fn)
         sys.exit(1)
     for service_swiss, service_data in services_json["services"].items():
         # service_swiss is SWISS/REPO-FACET
@@ -432,12 +432,12 @@ def do_revoke(so):
         with open(tmpfn, "w") as f:
             json.dump(services_json, f, indent=1)
         os.rename(tmpfn, fn)
-        print "removed %s" % s.furl
+        print("removed %s" % s.furl)
         if os.path.exists(os.path.join(serverdir, "twistd.pid")):
-            print "restarting server.."
+            print("restarting server..")
             restart_server(serverdir) # never returns
     else:
-        print "No such FURL found!"
+        print("No such FURL found!")
         sys.exit(1)
 
 Service = namedtuple("Service", ["furl", "comment"])
@@ -472,13 +472,13 @@ def do_list(so):
     serverdir = so.parent.serverdir
     services = list_services(serverdir)
     for i, s in enumerate(services):
-        print "#%d:" % i
-        print " ", s.furl
+        print("#%d:" % i)
+        print(" ", s.furl)
         if s.comment:
-            print "  ", s.comment
-        print
+            print("  ", s.comment)
+        print()
     if not services:
-        print "no git-foolscap FURLs configured"
+        print("no git-foolscap FURLs configured")
 
 @inlineCallbacks
 def do_accept(reactor, so):
@@ -488,15 +488,17 @@ def do_accept(reactor, so):
     wormhole.input_with_completion("Please enter the wormhole code: ",
                                    w.input_code(), reactor)
     furl = yield w.get_message()
-    print "got FURL:", furl
+    print("got FURL:", furl)
     if so["command"] == "clone":
         cmd = ("git", "clone", "--origin", so["remote"], furl)
     else:
-        print "adding new remote named %s" % so["remote"]
+        print("adding new remote named %s" % so["remote"])
         # TODO: this can't work twice with the default --remote=furl, so maybe
         # ask git how many "furl*" remotes it already has and pick the next
         # higher one (furl2, furl3, etc)
         cmd = ("git", "remote", "add", so["remote"], furl)
+        # TODO: this isn't working, it always gets the default 'furl'. Maybe
+        # our --remote is getting eaten by the '*gitargs'
     p = Popen(cmd)
     p.communicate()
     if p.returncode != 0:
@@ -510,18 +512,18 @@ def run():
     o = Options()
     try:
         o.parseOptions()
-    except usage.UsageError, e:
+    except usage.UsageError as e:
         c = o
         while hasattr(c, 'subOptions'):
             c = c.subOptions
-        print >>sys.stderr, str(c)
-        print >>sys.stderr, "Error:", e
+        print(str(c), file=sys.stderr)
+        print("Error:", e, file=sys.stderr)
         sys.exit(1)
 
 
     command = o.subCommand
     if not command:
-        print str(o)
+        print(str(o))
         sys.exit(0)
     so = o.subOptions
 
@@ -539,7 +541,7 @@ def run():
     # all subsequent commands must be run from an existing git repo that has
     # been prepared with "git-foolscap init"
     if not os.path.exists(os.path.join(o.serverdir, "flappserver.tac")):
-        print >>sys.stderr, "serverdir missing, please use 'git-foolscap init' first"
+        print("serverdir missing, please use 'git-foolscap init' first", file=sys.stderr)
         sys.exit(1)
 
     if command == "add":
