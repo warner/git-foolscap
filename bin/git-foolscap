@@ -70,19 +70,26 @@ this:
 
 Now use the "add" command to grant read-write access to the repository.
 
- git foolscap create read-write "for Bob"
+ git foolscap add read-write "for Bob"
 
-That command will emit a FURL. Simply give this FURL to somebody via a secure
-channel and have them run "git remote add NAME FURL". Remind them to install
-Foolscap and the "git-remote-pb" program. The comment, which follows the
-mode, is mandatory, and is recorded locally to help you remember who you gave
-the FURL to.
+That command will emit a FURL. The comment, which follows the mode, is
+mandatory, and is recorded locally to help you remember who you gave the FURL
+to. You can grant read-only access too, by using `read-only` instead of
+`read-write`.
 
-You can grant read-only access too:
+Give this FURL to somebody via a secure channel. Remind them to install
+Foolscap and the "git-remote-pb" program (`pipx install git-foolscap`).
+If they're creating a clone of your repository, they'll run:
 
- git foolscap create read-only "for Carol"
+ git clone FURL
 
-To use the invitation mechanism, use the "invite" command:
+If instead, they are adding a new Git "remote" to an existing repository,
+they'll need to choose a name for the remote. Then they should run:
+
+ git remote add NAME FURL
+
+As an alternative to copying the whole FURL, you can use the invitation
+mechanism. On the server side, use the "invite" command:
 
  git foolscap invite read-write "for Dave"
 
@@ -94,7 +101,6 @@ through the wormhole). Dave can then clone the repo by typing this code into:
 Or Dave can add the FURL to an existing repo with:
 
  git foolscap accept add-remote
-
 
 Each FURL will either be limited to read-only operations, or it will allow both
 read and write (i.e. clients can push into this repo). You must choose one or
